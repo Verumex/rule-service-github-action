@@ -28,17 +28,24 @@ async function getResults(executionId) {
   try {
     const resultsEndpoint = `/api/v1/data_pipelines/business_rule_service_results?data_pipelines_business_rule_services_executions_results_search_form%5Bexecution_id%5D=${executionId}`
     const response = await axios.get(resultsEndpoint)
+    // NOTE: There currently isn't an endpoint to fetch an execution
+    // specifically, so we are doing the poor-man's version in this version by
+    // polling for _results_ which will have the execution included _if any
+    // results are present_. The trick is that if there are no results there
+    // will be no execution, so its possible the execution will complete with no
+    // results (not super likely in real life) and we'll poll until the
+    // maxPollAttempts in that case.
     const executionData = response.data.included.find(obj => {
       return obj.type === 'execution'
     })
     // NOTE: The executionState will be "initiated", "completed" or "failed".
-    if(executionData.attributes.executionState !== 'initiated') {
+    if(executionData && executionData.attributes.executionState !== 'initiated') {
       // TODO: Get all results not just first page.
       return [executionData, response.data.data]
     }
     pollAttempts += 1
     if (pollAttempts == maxPollAttempts) {
-      throw 'Execution timed out (max poll attempts reached).'
+      throw 'Execution timed out with no results (max poll attempts reached).'
     }
     console.log("Polling for execution completion...")
 
