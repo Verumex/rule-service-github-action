@@ -9,44 +9,82 @@ const core = __nccwpck_require__(2186);
 const wait = __nccwpck_require__(4258);
 const axios = __nccwpck_require__(6545);
 
+axios.defaults.baseURL = core.getInput('api_host')
+axios.defaults.headers.common['Authorization'] =
+  `Bearer ${core.getInput('auth_token')}`
+const ruleServiceId = core.getInput('rule_service_id')
+let pollAttempts = 0
+const maxPollAttempts = 20
+const pollInterval = 2000 // milliseconds
 
-const fetchMe = httpClient.createFetch(
-  httpClient.base(core.getInput('api_host')),
-  httpClient.accept('application/json'),
-  httpClient.parse('json'),
-  httpClient.auth('Bearer ' + 'eyJhbGciOiJIUzI1NiJ9.eyJjbGllbnRfaWQiOiIwNGFiNmVjYS05ZTQxLTQ3M2QtOTkxZi05MTYwNzMxZDkxODAiLCJpYXQiOjE2MTM1ODUxODJ9.Gn5Ex8MpTSR8AwnnIlh-qBUf3eHNr_JshJ8u29eEHQY')
-)
-const executionId = '91607775-9d68-4df0-b5b9-0c6d5aec8c5a'
-const resultsEndpoint = `/api/v1/data_pipelines/business_rule_service_results?data_pipelines_business_rule_services_executions_results_search_form%5Bexecution_id%5D=${executionId}`
-fetchMe(resultsEndpoint).then(response => {
-  console.log(response.jsonData)
-  const executionData = response.jsonData.included.find(obj => {
-    return obj.type === 'execution'
-  })
-  // NOTE: The executionState will be "initiated", "completed" or "failed".
-  console.log(executionData.attributes.executionState)
-})
+async function initiateExecution() {
+  try {
+    const response = await axios.post(
+      `/api/v1/data_pipelines/business_rule_services/${ruleServiceId}/executions`, {
+        validation_scope: core.getInput('validation_scope'),
+        severity_level_threshold_to_trigger_failure: 5
+      }
+    );
+    return response.data.data.id;
+  } catch (error) {
+    core.setFailed(error.message);
+  }
+}
 
-// most @actions toolkit packages have async methods
+async function getResults(executionId) {
+  try {
+    const resultsEndpoint = `/api/v1/data_pipelines/business_rule_service_results?data_pipelines_business_rule_services_executions_results_search_form%5Bexecution_id%5D=${executionId}`
+    const response = await axios.get(resultsEndpoint)
+    // NOTE: There currently isn't an endpoint to fetch an execution
+    // specifically, so we are doing the poor-man's version in this version by
+    // polling for _results_ which will have the execution included _if any
+    // results are present_. The trick is that if there are no results there
+    // will be no execution, so its possible the execution will complete with no
+    // results (not super likely in real life) and we'll poll until the
+    // maxPollAttempts in that case.
+    const executionData = response.data.included.find(obj => {
+      return obj.type === 'execution'
+    })
+    // NOTE: The executionState will be "initiated", "completed" or "failed".
+    if(executionData && executionData.attributes.executionState !== 'initiated') {
+      // TODO: Get all results not just first page.
+      return [executionData, response.data.data]
+    }
+    pollAttempts += 1
+    if (pollAttempts == maxPollAttempts) {
+      throw 'Execution timed out with no results (max poll attempts reached).'
+    }
+    console.log("Polling for execution completion...")
+
+    await wait(pollInterval)
+    return await getResults(executionId)
+  } catch (error) {
+    core.setFailed(error.message || error);
+  }
+}
+
 async function run() {
   try {
+    const executionId = await initiateExecution();
+    const [execution, results] = await getResults(executionId);
+    results.forEach(function (result) {
+      let attributes = result.attributes;
+      core.info(`${attributes.ruleSignature}: ${attributes.message} (${attributes.severityLevel})`);
+    });
 
-    const ms = core.getInput('milliseconds');
-    core.info(`Waiting ${ms} milliseconds ...`);
+    if(execution.attributes.executionState === 'failed') {
+      core.setFailed('Rule execution failed.')
+    }
 
-    core.debug((new Date()).toTimeString()); // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
-    await wait(parseInt(ms));
-    core.info((new Date()).toTimeString());
-
-    core.setOutput('time', new Date().toTimeString());
+    // NOTE: Just leaving setOutput here for reference in case we want to use it
+    // later. See // https://github.com/actions/toolkit/blob/main/docs/commands.md#set-outputs
+    // core.setOutput('my_output', 'output value');
   } catch (error) {
-    console.log(error);
     core.setFailed(error.message);
   }
 }
 
 run();
-
 
 
 /***/ }),
