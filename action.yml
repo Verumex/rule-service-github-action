@@ -1,5 +1,5 @@
-name: 'Rule Service Execution'
-description: 'Execute the a VmX business rule service.'
+name: 'Verumex Rule Service Execution'
+description: 'Execute the a business rule service in VmX.'
 inputs:
   api_host:
     description: 'the host/env, e.g. https://myco.verumex.com'
