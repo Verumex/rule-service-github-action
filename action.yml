@@ -1,13 +1,22 @@
-name: 'Wait'
-description: 'Wait a designated number of milliseconds'
+name: 'Rule Service Execution'
+description: 'Execute the a VmX business rule service.'
 inputs:
-  milliseconds:  # id of input
-    description: 'number of milliseconds to wait'
+  api_host:
+    description: 'the host/env, e.g. https://myco.verumex.com'
     required: true
-    default: '1000'
-outputs:
-  time: # output will be available to future steps
-    description: 'The message to output'
+  auth_token:
+    description: 'your system user auth token'
+    required: true
+  rule_service_id:
+    description: 'the id of the rule service you want to use'
+    required: true
+  validation_scope:
+    description: 'the validation scope to use'
+    required: false
+    default: 'SYSTEM:STRUCTURE'
+# outputs:
+#   my_output: # output will be available to future steps
+#     description: 'The message to output/output value'
 runs:
   using: 'node12'
   main: 'dist/index.js'
