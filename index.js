@@ -18,7 +18,7 @@ async function initiateExecution() {
         severity_level_threshold_to_trigger_failure: 5
       }
     );
-    return response.data.id;
+    return response.data.data.id;
   } catch (error) {
     core.setFailed(error.message);
   }
